@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "./StakeToken.sol";
 contract YieldOko is Ownable {
 
     using SafeMath for uint256;
@@ -37,6 +38,7 @@ contract YieldOko is Ownable {
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
+    event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
 
     constructor(
@@ -170,6 +172,58 @@ contract YieldOko is Ownable {
      // Safe cake transfer function, just in case if rounding error causes pool to not have enough CAKEs.
     function safeTokenTransfer(address _to, uint256 _amount) internal {
         // rewardToken.safeTokenTransfer(_to, _amount);
+    }
+
+
+    function emergencyWithdraw(uint256 _pid) public {
+        PoolInfo storage pool = poolInfo[_pid];
+        UserInfo storage user = userInfo[_pid][msg.sender];
+        // pool.lpToken.safeTransfer(address(msg.sender), user.amount);
+        emit EmergencyWithdraw(msg.sender, _pid, user.amount);
+        user.amount = 0;
+        user.rewardDebt = 0;
+    }
+
+
+    // Stake CAKE tokens to MasterChef
+    function enterStaking(uint256 _amount) public {
+        PoolInfo storage pool = poolInfo[0];
+        UserInfo storage user = userInfo[0][msg.sender];
+        updatePool(0);
+        if (user.amount > 0) {
+            uint256 pending = user.amount.mul(pool.accRewardPerShare).div(1e12).sub(user.rewardDebt);
+            if(pending > 0) {
+                // safeCakeTransfer(msg.sender, pending);
+            }
+        }
+        if(_amount > 0) {
+            // pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+            user.amount = user.amount.add(_amount);
+        }
+        user.rewardDebt = user.amount.mul(pool.accRewardPerShare).div(1e12);
+
+        // syrup.mint(msg.sender, _amount);
+        emit Deposit(msg.sender, 0, _amount);
+    }
+
+    // Withdraw CAKE tokens from STAKING.
+    function leaveStaking(uint256 _amount) public {
+        PoolInfo storage pool = poolInfo[0];
+        UserInfo storage user = userInfo[0][msg.sender];
+        require(user.amount >= _amount, "withdraw: not good");
+        updatePool(0);
+        uint256 pending = user.amount.mul(pool.accRewardPerShare).div(1e12).sub(user.rewardDebt);
+        if(pending > 0) {
+            // safeCakeTransfer(msg.sender, pending);
+        }
+        if(_amount > 0) {
+            user.amount = user.amount.sub(_amount);
+            // pool.lpToken.safeTransfer(address(msg.sender), _amount);
+        }
+        user.rewardDebt = user.amount.mul(pool.accRewardPerShare).div(1e12);
+
+        // syrup.burn(msg.sender, _amount);
+        emit Withdraw(msg.sender, 0, _amount);
     }
 
         
